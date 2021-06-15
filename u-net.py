@@ -44,7 +44,7 @@ from tensorflow.keras.layers.experimental import preprocessing
 # TEST/DEBUG PARAMS
 PLOT_SHOW = False
 TRAIN = True
-
+SANITY_TEST = True
 
 #DEFINES
 IMG_SIZE=128 
@@ -71,66 +71,72 @@ SEGMENT_CLASSES = {
 TRAIN_DATASET_PATH = '../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/'
 VALIDATION_DATASET_PATH = '../BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData'
 
-test_image_flair=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii').get_fdata()
-test_image_t1=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t1.nii').get_fdata()
-test_image_t1ce=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t1ce.nii').get_fdata()
-test_image_t2=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t2.nii').get_fdata()
-test_mask=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_seg.nii').get_fdata()
+print("Set dataset paths")
+
+# Sanity test to check the dataset paths and imaging ability
+if SANITY_TEST:
+    test_image_flair=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii').get_fdata()
+    test_image_t1=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t1.nii').get_fdata()
+    test_image_t1ce=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t1ce.nii').get_fdata()
+    test_image_t2=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t2.nii').get_fdata()
+    test_mask=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_seg.nii').get_fdata()
 
 
-fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(1,5, figsize = (20, 10))
-slice_w = 25
-ax1.imshow(test_image_flair[:,:,test_image_flair.shape[0]//2-slice_w], cmap = 'gray')
-ax1.set_title('Image flair')
-ax2.imshow(test_image_t1[:,:,test_image_t1.shape[0]//2-slice_w], cmap = 'gray')
-ax2.set_title('Image t1')
-ax3.imshow(test_image_t1ce[:,:,test_image_t1ce.shape[0]//2-slice_w], cmap = 'gray')
-ax3.set_title('Image t1ce')
-ax4.imshow(test_image_t2[:,:,test_image_t2.shape[0]//2-slice_w], cmap = 'gray')
-ax4.set_title('Image t2')
-ax5.imshow(test_mask[:,:,test_mask.shape[0]//2-slice_w])
-ax5.set_title('Mask')
+    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(1,5, figsize = (20, 10))
+    slice_w = 25
+    ax1.imshow(test_image_flair[:,:,test_image_flair.shape[0]//2-slice_w], cmap = 'gray')
+    ax1.set_title('Image flair')
+    ax2.imshow(test_image_t1[:,:,test_image_t1.shape[0]//2-slice_w], cmap = 'gray')
+    ax2.set_title('Image t1')
+    ax3.imshow(test_image_t1ce[:,:,test_image_t1ce.shape[0]//2-slice_w], cmap = 'gray')
+    ax3.set_title('Image t1ce')
+    ax4.imshow(test_image_t2[:,:,test_image_t2.shape[0]//2-slice_w], cmap = 'gray')
+    ax4.set_title('Image t2')
+    ax5.imshow(test_mask[:,:,test_mask.shape[0]//2-slice_w])
+    ax5.set_title('Mask')
 
-# Skip 50:-50 slices since there is not much to see
-fig1, ax1 = plt.subplots(1, 1, figsize = (15,15))
-ax1.imshow(rotate(montage(test_image_t1[50:-50,:,:]), 90, resize=True), cmap ='gray')
+    # Skip 50:-50 slices since there is not much to see
+    fig1, ax1 = plt.subplots(1, 1, figsize = (15,15))
+    ax1.imshow(rotate(montage(test_image_t1[50:-50,:,:]), 90, resize=True), cmap ='gray')
 
-###################################################
-# Show the tumor segments over each slice
-fig, ax1 = plt.subplots(1, 1, figsize = (15,15))
-ax1.imshow(rotate(montage(test_mask[60:-60,:,:]), 90, resize=True), cmap ='gray')
+    ###################################################
+    # Show the tumor segments over each slice
+    fig, ax1 = plt.subplots(1, 1, figsize = (15,15))
+    ax1.imshow(rotate(montage(test_mask[60:-60,:,:]), 90, resize=True), cmap ='gray')
 
-###################################################
-#gif time
-shutil.copy2(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii', './test_gif_BraTS20_Training_001_flair.nii')
-gif2nif.write_gif_normal('./test_gif_BraTS20_Training_001_flair.nii')
+    ###################################################
+    #gif time
+    shutil.copy2(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii', './test_gif_BraTS20_Training_001_flair.nii')
+    gif2nif.write_gif_normal('./test_gif_BraTS20_Training_001_flair.nii')
 
-###################################################
-# Add effects to show segments
-niimg = nl.image.load_img(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii')
-nimask = nl.image.load_img(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_seg.nii')
+    ###################################################
+    # Add effects to show segments
+    niimg = nl.image.load_img(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii')
+    nimask = nl.image.load_img(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_seg.nii')
 
-fig, axes = plt.subplots(nrows=4, figsize=(30, 40))
+    fig, axes = plt.subplots(nrows=4, figsize=(30, 40))
 
 
-nlplt.plot_anat(niimg,
-                title='BraTS20_Training_001_flair.nii plot_anat',
-                axes=axes[0])
+    nlplt.plot_anat(niimg,
+                    title='BraTS20_Training_001_flair.nii plot_anat',
+                    axes=axes[0])
 
-nlplt.plot_epi(niimg,
-               title='BraTS20_Training_001_flair.nii plot_epi',
-               axes=axes[1])
+    nlplt.plot_epi(niimg,
+                   title='BraTS20_Training_001_flair.nii plot_epi',
+                   axes=axes[1])
 
-nlplt.plot_img(niimg,
-               title='BraTS20_Training_001_flair.nii plot_img',
-               axes=axes[2])
+    nlplt.plot_img(niimg,
+                   title='BraTS20_Training_001_flair.nii plot_img',
+                   axes=axes[2])
 
-nlplt.plot_roi(nimask, 
-               title='BraTS20_Training_001_flair.nii with mask plot_roi',
-               bg_img=niimg, 
-               axes=axes[3], cmap='Paired')
+    nlplt.plot_roi(nimask, 
+                   title='BraTS20_Training_001_flair.nii with mask plot_roi',
+                   bg_img=niimg, 
+                   axes=axes[3], cmap='Paired')
 
-if PLOT_SHOW: plt.show()
+    print("Ran sanity check")
+
+    if PLOT_SHOW: plt.show()
 
 # dice loss as defined above for 4 segmentation classes
 def dice_coef(y_true, y_pred, smooth=1.0):
@@ -149,8 +155,6 @@ def dice_coef(y_true, y_pred, smooth=1.0):
     K.print_tensor(total_loss, message=' total dice coef: ')
     return total_loss
 
-
- 
 # define per class evaluation of dice coef
 # inspired by https://github.com/keras-team/keras/issues/9395
 def dice_coef_necrotic(y_true, y_pred, epsilon=1e-6):
@@ -187,7 +191,7 @@ def specificity(y_true, y_pred):
 
 
 
-# source https://naomi-fridman.medium.com/multi-class-image-segmentation-a5cc671e647a
+# source: https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/
 
 def build_unet(inputs, ker_init, dropout):
     conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = ker_init)(inputs)
@@ -237,7 +241,9 @@ def build_unet(inputs, ker_init, dropout):
 
 input_layer = Input((IMG_SIZE, IMG_SIZE, 2))
 
+print("Building u-net")
 model = build_unet(input_layer, 'he_normal', 0.2)
+print("Compiling u-net")
 model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema ,dice_coef_enhancing] )
 
 # lists of directories with studies
@@ -342,19 +348,25 @@ callbacks = [
                                     verbose=1, save_best_only=True, save_weights_only = True),
     csv_logger
 ]
+print("Built Data Generator")
+print("Clearing Keras Session")
 
 K.clear_session()
 
 if TRAIN:
+
+    print("Beginning model training")
     history =  model.fit(training_generator,
                          epochs=35,
                          steps_per_epoch=len(train_ids),
                          callbacks= callbacks,
                          validation_data = valid_generator
                          )  
+    print("Saving Trained Model")
     model.save("model_x1_1.h5")
 
 ############ load trained model ################
+print("Loading Trained Model")
 model = keras.models.load_model('../input/modelperclasseval/model_per_class.h5', 
                                    custom_objects={ 'accuracy' : tf.keras.metrics.MeanIoU(num_classes=4),
                                                    "dice_coef": dice_coef,
@@ -373,6 +385,7 @@ hist=history
 ############### ########## ####### #######
 
 # hist=history.history
+print("Retreiving perfomance metrics")
 
 acc=hist['accuracy']
 val_acc=hist['val_accuracy']
@@ -460,7 +473,7 @@ def showPredictsById(case, start_slice = 60):
     axarr[5].title.set_text(f'{SEGMENT_CLASSES[3]} predicted')
     if PLOT_SHOW: plt.show()
     
-    
+print("Displaying predictions")
 showPredictsById(case=test_ids[0][-3:])
 showPredictsById(case=test_ids[1][-3:])
 showPredictsById(case=test_ids[2][-3:])
@@ -468,7 +481,6 @@ showPredictsById(case=test_ids[3][-3:])
 showPredictsById(case=test_ids[4][-3:])
 showPredictsById(case=test_ids[5][-3:])
 showPredictsById(case=test_ids[6][-3:])
-
 
 mask = np.zeros((10,10))
 mask[3:-3, 3:-3] = 1 # white square in black background
@@ -493,11 +505,8 @@ core = p[:,:,:,1]
 edema= p[:,:,:,2]
 enhancing = p[:,:,:,3]
 
-
 i=40 # slice at
 eval_class = 2 #     0 : 'NOT tumor',  1 : 'ENHANCING',    2 : 'CORE',    3 : 'WHOLE'
-
-
 
 gt[gt != eval_class] = 1 # use only one class for per class evaluation 
 
@@ -511,6 +520,8 @@ axarr[1].imshow(p[i,:,:,eval_class], cmap="gray")
 axarr[1].title.set_text(f'predicted class: {SEGMENT_CLASSES[eval_class]}')
 if PLOT_SHOW: plt.show()
 
+
+print("Compiling model for test data")
 model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
 # Evaluate the model on the test data using `evaluate`
 print("Evaluate on test data")
