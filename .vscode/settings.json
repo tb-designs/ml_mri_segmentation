@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "C:\\Users\\ryanr\\AppData\\Local\\Programs\\Python\\Python38\\python.exe",
+    "python.pythonPath": "C:\\Users\\ryanr\\Desktop\\ECE470\\project\\ml-env\\Scripts\\python.exe",
     "python.linting.banditEnabled": true,
-    "python.linting.enabled": true
+    "python.linting.enabled": false
 }
