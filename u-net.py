@@ -1,6 +1,7 @@
 # Setup Environment
 import os
 import glob
+import cv2
 from pickle import TRUE
 import PIL
 import shutil
@@ -41,11 +42,14 @@ from tensorflow.keras.layers.experimental import preprocessing
 
 
 # TEST/DEBUG PARAMS
-PLOT_SHOW = True
+PLOT_SHOW = False
 TRAIN = True
 
 
-
+#DEFINES
+IMG_SIZE=128 
+VOLUME_SLICES = 100 
+VOLUME_START_AT = 22 # first slice of volume that we will include
 
 # Make numpy printouts easier to read.
 np.set_printoptions(precision=3, suppress=True)
@@ -58,10 +62,7 @@ SEGMENT_CLASSES = {
     3 : 'ENHANCING' # original 4 -> converted into 3 later
 }
 
-# there are 155 slices per volume
-# to start at 5 and use 145 slices means we will skip the first 5 and last 5 
-VOLUME_SLICES = 100 
-VOLUME_START_AT = 22 # first slice of volume that we will include
+
 
 ###################################################
 # Sanity check of nii data
@@ -131,7 +132,7 @@ nlplt.plot_roi(nimask,
 
 if PLOT_SHOW: plt.show()
 
-# dice loss as defined above for 4 classes
+# dice loss as defined above for 4 segmentation classes
 def dice_coef(y_true, y_pred, smooth=1.0):
     class_num = 4
     for i in range(class_num):
@@ -139,13 +140,13 @@ def dice_coef(y_true, y_pred, smooth=1.0):
         y_pred_f = K.flatten(y_pred[:,:,:,i])
         intersection = K.sum(y_true_f * y_pred_f)
         loss = ((2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth))
-   #     K.print_tensor(loss, message='loss value for class {} : '.format(SEGMENT_CLASSES[i]))
+        K.print_tensor(loss, message='loss value for class {} : '.format(SEGMENT_CLASSES[i]))
         if i == 0:
             total_loss = loss
         else:
             total_loss = total_loss + loss
     total_loss = total_loss / class_num
-#    K.print_tensor(total_loss, message=' total dice coef: ')
+    K.print_tensor(total_loss, message=' total dice coef: ')
     return total_loss
 
 
@@ -182,7 +183,9 @@ def specificity(y_true, y_pred):
     true_negatives = K.sum(K.round(K.clip((1-y_true) * (1-y_pred), 0, 1)))
     possible_negatives = K.sum(K.round(K.clip(1-y_true, 0, 1)))
     return true_negatives / (possible_negatives + K.epsilon())
-IMG_SIZE=128
+
+
+
 
 # source https://naomi-fridman.medium.com/multi-class-image-segmentation-a5cc671e647a
 
@@ -427,7 +430,7 @@ def predictByPath(case_path,case):
 
 
 def showPredictsById(case, start_slice = 60):
-    path = f"../input/brats20-dataset-training-validation/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
+    path = f"../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
     gt = nib.load(os.path.join(path, f'BraTS20_Training_{case}_seg.nii')).get_fdata()
     origImage = nib.load(os.path.join(path, f'BraTS20_Training_{case}_flair.nii')).get_fdata()
     p = predictByPath(path,case)
@@ -467,21 +470,21 @@ showPredictsById(case=test_ids[5][-3:])
 showPredictsById(case=test_ids[6][-3:])
 
 
-# mask = np.zeros((10,10))
-# mask[3:-3, 3:-3] = 1 # white square in black background
-# im = mask + np.random.randn(10,10) * 0.01 # random image
-# masked = np.ma.masked_where(mask == 0, mask)
+mask = np.zeros((10,10))
+mask[3:-3, 3:-3] = 1 # white square in black background
+im = mask + np.random.randn(10,10) * 0.01 # random image
+masked = np.ma.masked_where(mask == 0, mask)
 
-# plt.figure()
-# plt.subplot(1,2,1)
-# plt.imshow(im, 'gray', interpolation='none')
-# plt.subplot(1,2,2)
-# plt.imshow(im, 'gray', interpolation='none')
-# plt.imshow(masked, 'jet', interpolation='none', alpha=0.7)
-# if PLOT_SHOW: plt.show()
+plt.figure()
+plt.subplot(1,2,1)
+plt.imshow(im, 'gray', interpolation='none')
+plt.subplot(1,2,2)
+plt.imshow(im, 'gray', interpolation='none')
+plt.imshow(masked, 'jet', interpolation='none', alpha=0.7)
+if PLOT_SHOW: plt.show()
 
 case = case=test_ids[3][-3:]
-path = f"../input/brats20-dataset-training-validation/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
+path = f"../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
 gt = nib.load(os.path.join(path, f'BraTS20_Training_{case}_seg.nii')).get_fdata()
 p = predictByPath(path,case)
 
