@@ -1,6 +1,7 @@
 # Setup Environment
 import os
 import glob
+from pickle import TRUE
 import PIL
 import shutil
 import numpy as np
@@ -24,6 +25,9 @@ import gif_your_nifti.core as gif2nif
 import keras
 import keras.backend as K
 from keras.callbacks import CSVLogger
+
+# Keras specific u-net
+#from keras_unet_collection import models, base, utils
 import tensorflow as tf
 from tensorflow.keras.utils import plot_model
 from sklearn.preprocessing import MinMaxScaler
@@ -34,6 +38,14 @@ from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, TensorBoard
 from tensorflow.keras.layers.experimental import preprocessing
+
+
+# TEST/DEBUG PARAMS
+PLOT_SHOW = True
+
+
+
+
 
 # Make numpy printouts easier to read.
 np.set_printoptions(precision=3, suppress=True)
@@ -52,7 +64,9 @@ VOLUME_SLICES = 100
 VOLUME_START_AT = 22 # first slice of volume that we will include
 
 ###################################################
-# Test to see images
+# Sanity check of nii data
+
+# Set path
 TRAIN_DATASET_PATH = '../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/'
 VALIDATION_DATASET_PATH = '../BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData'
 
@@ -115,7 +129,7 @@ nlplt.plot_roi(nimask,
                bg_img=niimg, 
                axes=axes[3], cmap='Paired')
 
-plt.show()
+if PLOT_SHOW: plt.show()
 
 # dice loss as defined above for 4 classes
 def dice_coef(y_true, y_pred, smooth=1.0):
@@ -328,13 +342,13 @@ callbacks = [
 
 K.clear_session()
 
- history =  model.fit(training_generator,
+history =  model.fit(training_generator,
                      epochs=35,
                      steps_per_epoch=len(train_ids),
                      callbacks= callbacks,
                      validation_data = valid_generator
                      )  
- model.save("model_x1_1.h5")
+model.save("model_x1_1.h5")
 
  ############ load trained model ################
 model = keras.models.load_model('../input/modelperclasseval/model_per_class.h5', 
@@ -385,7 +399,7 @@ ax[3].plot(epoch,hist['mean_io_u'],'b',label='Training mean IOU')
 ax[3].plot(epoch,hist['val_mean_io_u'],'r',label='Validation mean IOU')
 ax[3].legend()
 
-plt.show()
+if PLOT_SHOW: plt.show()
 
 def predictByPath(case_path,case):
     files = next(os.walk(case_path))[2]
@@ -440,7 +454,7 @@ def showPredictsById(case, start_slice = 60):
     axarr[4].title.set_text(f'{SEGMENT_CLASSES[2]} predicted')
     axarr[5].imshow(enhancing[start_slice,:,], cmap="OrRd", interpolation='none', alpha=0.3)
     axarr[5].title.set_text(f'{SEGMENT_CLASSES[3]} predicted')
-    plt.show()
+    if PLOT_SHOW: plt.show()
     
     
 showPredictsById(case=test_ids[0][-3:])
@@ -463,7 +477,7 @@ showPredictsById(case=test_ids[6][-3:])
 # plt.subplot(1,2,2)
 # plt.imshow(im, 'gray', interpolation='none')
 # plt.imshow(masked, 'jet', interpolation='none', alpha=0.7)
-# plt.show()
+# if PLOT_SHOW: plt.show()
 
 case = case=test_ids[3][-3:]
 path = f"../input/brats20-dataset-training-validation/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
@@ -491,7 +505,7 @@ axarr[0].imshow(resized_gt, cmap="gray")
 axarr[0].title.set_text('ground truth')
 axarr[1].imshow(p[i,:,:,eval_class], cmap="gray")
 axarr[1].title.set_text(f'predicted class: {SEGMENT_CLASSES[eval_class]}')
-plt.show()
+if PLOT_SHOW: plt.show()
 
 model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
 # Evaluate the model on the test data using `evaluate`
