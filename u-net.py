@@ -23,14 +23,16 @@ import nilearn.plotting as nlplt
 import gif_your_nifti.core as gif2nif
 
 # ml libs
-import keras
 import keras.backend as K
 from keras.callbacks import CSVLogger
+import tensorflow.keras as keras
+
 
 # Keras specific u-net
 #from keras_unet_collection import models, base, utils
 import tensorflow as tf
-from tensorflow.keras.utils import plot_model
+from tensorflow.keras.utils import plot_model, Sequence
+from tensorflow.keras.preprocessing import sequence
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
@@ -43,13 +45,14 @@ from tensorflow.keras.layers.experimental import preprocessing
 
 # TEST/DEBUG PARAMS
 PLOT_SHOW = False
-TRAIN = True
-SANITY_TEST = True
+TRAIN = False
+SANITY_TEST = False
 
 #DEFINES
 IMG_SIZE=128 
 VOLUME_SLICES = 100 
 VOLUME_START_AT = 22 # first slice of volume that we will include
+EPOCHS = 10
 
 # Make numpy printouts easier to read.
 np.set_printoptions(precision=3, suppress=True)
@@ -265,7 +268,7 @@ train_and_test_ids = pathListIntoIds(train_and_val_directories);
 train_test_ids, val_ids = train_test_split(train_and_test_ids,test_size=0.2) 
 train_ids, test_ids = train_test_split(train_test_ids,test_size=0.15) 
 
-class DataGenerator(keras.utils.Sequence):
+class DataGenerator(Sequence):
     'Generates data for Keras'
     def __init__(self, list_IDs, dim=(IMG_SIZE,IMG_SIZE), batch_size = 1, n_channels = 2, shuffle=True):
         'Initialization'
@@ -357,7 +360,7 @@ if TRAIN:
 
     print("Beginning model training")
     history =  model.fit(training_generator,
-                         epochs=35,
+                         epochs=EPOCHS,
                          steps_per_epoch=len(train_ids),
                          callbacks= callbacks,
                          validation_data = valid_generator
@@ -367,7 +370,7 @@ if TRAIN:
 
 ############ load trained model ################
 print("Loading Trained Model")
-model = keras.models.load_model('../input/modelperclasseval/model_per_class.h5', 
+model = keras.models.load_model('model_x1_1.h5', 
                                    custom_objects={ 'accuracy' : tf.keras.metrics.MeanIoU(num_classes=4),
                                                    "dice_coef": dice_coef,
                                                    "precision": precision,
@@ -378,7 +381,7 @@ model = keras.models.load_model('../input/modelperclasseval/model_per_class.h5',
                                                    "dice_coef_enhancing": dice_coef_enhancing
                                                   }, compile=False)
 
-history = pd.read_csv('../input/modelperclasseval/training_per_class.log', sep=',', engine='python')
+history = pd.read_csv('training.log', sep=',', engine='python')
 
 hist=history
 
