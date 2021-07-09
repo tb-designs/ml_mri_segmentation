@@ -1,63 +1,64 @@
-# Setup Environment
-import os
-import glob
-import cv2
-from pickle import TRUE
-import PIL
-import shutil
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-from skimage import data
-from skimage.util import montage 
-import skimage.transform as skTrans
-from skimage.transform import rotate
-from skimage.transform import resize
-from PIL import Image, ImageOps  
+# TODO Liscense stuff here!
 
-# neural imaging
+
+
+# for file access to use data generator
+import os
+
+# math operations and image resizing
+import numpy as np
+import cv2
+
+# pandas used for reading .csv
+import pandas as pd
+
+# for plotting results
+import matplotlib.pyplot as plt
+
+# neural imaging library: NiBabel
+# for NlfTI file handling
+# Available: https://nipy.org/nibabel/
 import nilearn as nl
 import nibabel as nib
 import nilearn.plotting as nlplt
-import gif_your_nifti.core as gif2nif
 
-# ml libs
+# Keras/Tensorflow imports
 import keras.backend as K
 from keras.callbacks import CSVLogger
 import tensorflow.keras as keras
-
-
-# Keras specific u-net
-#from keras_unet_collection import models, base, utils
 import tensorflow as tf
-from tensorflow.keras.utils import plot_model, Sequence
-from tensorflow.keras.preprocessing import sequence
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import *
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
+
+# convenient split function imported from sk-learn
+from sklearn.model_selection import train_test_split
+
+# Callback functionality
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, TensorBoard
-from tensorflow.keras.layers.experimental import preprocessing
+
+
+
 
 
 # TEST/DEBUG PARAMS
-PLOT_SHOW = False
+PLOT_SHOW = True
 TRAIN = False
+TEST = True
 SANITY_TEST = False
 
-#DEFINES
+
+#IMPORTANT PARAMETERS DEFINES
 IMG_SIZE=128 
 VOLUME_SLICES = 100 
-VOLUME_START_AT = 22 # first slice of volume that we will include
-EPOCHS = 10
+VOLUME_START_AT = 22 # first slice of volume that we will include, early slices often have no useful information
+EPOCHS = 35
 
 # Make numpy printouts easier to read.
 np.set_printoptions(precision=3, suppress=True)
 
-# DEFINE seg-areas  
+# DEFINE segmetation-areas  
 SEGMENT_CLASSES = {
     0 : 'NOT tumor',
     1 : 'NECROTIC/CORE', # or NON-ENHANCING tumor CORE
@@ -68,7 +69,7 @@ SEGMENT_CLASSES = {
 
 
 ###################################################
-# Sanity check of nii data
+# Sanity check of nii data (for debug only)
 
 # Set path
 TRAIN_DATASET_PATH = '../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/'
@@ -98,19 +99,7 @@ if SANITY_TEST:
     ax5.imshow(test_mask[:,:,test_mask.shape[0]//2-slice_w])
     ax5.set_title('Mask')
 
-    # Skip 50:-50 slices since there is not much to see
-    fig1, ax1 = plt.subplots(1, 1, figsize = (15,15))
-    ax1.imshow(rotate(montage(test_image_t1[50:-50,:,:]), 90, resize=True), cmap ='gray')
 
-    ###################################################
-    # Show the tumor segments over each slice
-    fig, ax1 = plt.subplots(1, 1, figsize = (15,15))
-    ax1.imshow(rotate(montage(test_mask[60:-60,:,:]), 90, resize=True), cmap ='gray')
-
-    ###################################################
-    #gif time
-    shutil.copy2(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii', './test_gif_BraTS20_Training_001_flair.nii')
-    gif2nif.write_gif_normal('./test_gif_BraTS20_Training_001_flair.nii')
 
     ###################################################
     # Add effects to show segments
@@ -141,25 +130,28 @@ if SANITY_TEST:
 
     if PLOT_SHOW: plt.show()
 
-# dice loss as defined above for 4 segmentation classes
+# dice loss 
 def dice_coef(y_true, y_pred, smooth=1.0):
-    class_num = 4
-    for i in range(class_num):
-        y_true_f = K.flatten(y_true[:,:,:,i])
-        y_pred_f = K.flatten(y_pred[:,:,:,i])
-        intersection = K.sum(y_true_f * y_pred_f)
-        loss = ((2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth))
+    n_classes = 4
+    for i in range(n_classes):
+        y_t_flat = K.flatten(y_true[:,:,:,i])
+        y_p_flat = K.flatten(y_pred[:,:,:,i])
+        intersection = K.sum(y_t_flat * y_p_flat)
+        loss = ((2. * intersection + smooth) / (K.sum(y_t_flat) + K.sum(y_p_flat) + smooth))
         K.print_tensor(loss, message='loss value for class {} : '.format(SEGMENT_CLASSES[i]))
         if i == 0:
             total_loss = loss
         else:
             total_loss = total_loss + loss
-    total_loss = total_loss / class_num
+    total_loss = total_loss / n_classes
     K.print_tensor(total_loss, message=' total dice coef: ')
     return total_loss
 
-# define per class evaluation of dice coef
-# inspired by https://github.com/keras-team/keras/issues/9395
+# per class dice coefficient
+def dice_coef_none(y_true, y_pred, epsilon=1e-6):
+    intersection = K.sum(K.abs(y_true[:,:,:,0] * y_pred[:,:,:,0]))
+    return (2. * intersection) / (K.sum(K.square(y_true[:,:,:,0])) + K.sum(K.square(y_pred[:,:,:,0])) + epsilon)
+
 def dice_coef_necrotic(y_true, y_pred, epsilon=1e-6):
     intersection = K.sum(K.abs(y_true[:,:,:,1] * y_pred[:,:,:,1]))
     return (2. * intersection) / (K.sum(K.square(y_true[:,:,:,1])) + K.sum(K.square(y_pred[:,:,:,1])) + epsilon)
@@ -195,6 +187,7 @@ def specificity(y_true, y_pred):
 
 
 # source: https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/
+
 
 def build_unet(inputs, ker_init, dropout):
     conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = ker_init)(inputs)
@@ -343,8 +336,8 @@ csv_logger = CSVLogger('training.log', separator=',', append=False)
 
 
 callbacks = [
-    keras.callbacks.EarlyStopping(monitor='loss', min_delta=0,
-                                  patience=2, verbose=1, mode='auto'),
+    #keras.callbacks.EarlyStopping(monitor='loss', min_delta=0,
+                                  #patience=2, verbose=1, mode='auto'),
     keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                                   patience=2, min_lr=0.000001, verbose=1),
     keras.callbacks.ModelCheckpoint(filepath = 'model_.{epoch:02d}-{val_loss:.6f}.m5',
@@ -378,7 +371,8 @@ model = keras.models.load_model('model_x1_1.h5',
                                                    "specificity":specificity,
                                                    "dice_coef_necrotic": dice_coef_necrotic,
                                                    "dice_coef_edema": dice_coef_edema,
-                                                   "dice_coef_enhancing": dice_coef_enhancing
+                                                   "dice_coef_enhancing": dice_coef_enhancing,
+                                                   "dice_coef_none": dice_coef_none
                                                   }, compile=False)
 
 history = pd.read_csv('training.log', sep=',', engine='python')
@@ -387,7 +381,6 @@ hist=history
 
 ############### ########## ####### #######
 
-# hist=history.history
 print("Retreiving perfomance metrics")
 
 acc=hist['accuracy']
@@ -424,7 +417,7 @@ if PLOT_SHOW: plt.show()
 def predictByPath(case_path,case):
     files = next(os.walk(case_path))[2]
     X = np.empty((VOLUME_SLICES, IMG_SIZE, IMG_SIZE, 2))
-  #  y = np.empty((VOLUME_SLICES, IMG_SIZE, IMG_SIZE))
+    #y = np.empty((VOLUME_SLICES, IMG_SIZE, IMG_SIZE))
     
     vol_path = os.path.join(case_path, f'BraTS20_Training_{case}_flair.nii');
     flair=nib.load(vol_path).get_fdata()
@@ -432,16 +425,17 @@ def predictByPath(case_path,case):
     vol_path = os.path.join(case_path, f'BraTS20_Training_{case}_t1ce.nii');
     ce=nib.load(vol_path).get_fdata() 
     
- #   vol_path = os.path.join(case_path, f'BraTS20_Training_{case}_seg.nii');
- #   seg=nib.load(vol_path).get_fdata()  
+    vol_path = os.path.join(case_path, f'BraTS20_Training_{case}_seg.nii');
+    seg=nib.load(vol_path).get_fdata()  
 
     
     for j in range(VOLUME_SLICES):
         X[j,:,:,0] = cv2.resize(flair[:,:,j+VOLUME_START_AT], (IMG_SIZE,IMG_SIZE))
         X[j,:,:,1] = cv2.resize(ce[:,:,j+VOLUME_START_AT], (IMG_SIZE,IMG_SIZE))
- #       y[j,:,:] = cv2.resize(seg[:,:,j+VOLUME_START_AT], (IMG_SIZE,IMG_SIZE))
+        #y[j,:,:] = cv2.resize(seg[:,:,j+VOLUME_START_AT], (IMG_SIZE,IMG_SIZE))
         
-  #  model.evaluate(x=X,y=y[:,:,:,0], callbacks= callbacks)
+    #model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
+    #model.evaluate(x=X,y=y[:,:,:], callbacks= callbacks)
     return model.predict(X/np.max(X), verbose=1)
 
 
@@ -458,51 +452,37 @@ def showPredictsById(case, start_slice = 60):
     plt.figure(figsize=(18, 50))
     f, axarr = plt.subplots(1,6, figsize = (18, 50)) 
 
-    for i in range(6): # for each image, add brain background
+    for i in range(3): # for each image, add brain background
         axarr[i].imshow(cv2.resize(origImage[:,:,start_slice+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE)), cmap="gray", interpolation='none')
     
     axarr[0].imshow(cv2.resize(origImage[:,:,start_slice+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE)), cmap="gray")
     axarr[0].title.set_text('Original image flair')
     curr_gt=cv2.resize(gt[:,:,start_slice+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE), interpolation = cv2.INTER_NEAREST)
-    axarr[1].imshow(curr_gt, cmap="Reds", interpolation='none', alpha=0.3) # ,alpha=0.3,cmap='Reds'
+    axarr[1].imshow(curr_gt, cmap="Reds", interpolation='none', alpha=0.3)
     axarr[1].title.set_text('Ground truth')
     axarr[2].imshow(p[start_slice,:,:,1:4], cmap="Reds", interpolation='none', alpha=0.3)
     axarr[2].title.set_text('all classes')
-    axarr[3].imshow(edema[start_slice,:,:], cmap="OrRd", interpolation='none', alpha=0.3)
+    axarr[3].imshow(edema[start_slice,:,:], cmap="RdPu", interpolation='none', alpha=0.3)
     axarr[3].title.set_text(f'{SEGMENT_CLASSES[1]} predicted')
-    axarr[4].imshow(core[start_slice,:,], cmap="OrRd", interpolation='none', alpha=0.3)
+    axarr[4].imshow(core[start_slice,:,], cmap="RdPu", interpolation='none', alpha=0.3)
     axarr[4].title.set_text(f'{SEGMENT_CLASSES[2]} predicted')
-    axarr[5].imshow(enhancing[start_slice,:,], cmap="OrRd", interpolation='none', alpha=0.3)
+    axarr[5].imshow(enhancing[start_slice,:,], cmap="RdPu", interpolation='none', alpha=0.3)
     axarr[5].title.set_text(f'{SEGMENT_CLASSES[3]} predicted')
     if PLOT_SHOW: plt.show()
     
 print("Displaying predictions")
 showPredictsById(case=test_ids[0][-3:])
-showPredictsById(case=test_ids[1][-3:])
-showPredictsById(case=test_ids[2][-3:])
-showPredictsById(case=test_ids[3][-3:])
-showPredictsById(case=test_ids[4][-3:])
-showPredictsById(case=test_ids[5][-3:])
-showPredictsById(case=test_ids[6][-3:])
+#showPredictsById(case=test_ids[1][-3:])
+#showPredictsById(case=test_ids[2][-3:])
+#showPredictsById(case=test_ids[3][-3:])
+#showPredictsById(case=test_ids[4][-3:])
+#showPredictsById(case=test_ids[5][-3:])
+#showPredictsById(case=test_ids[6][-3:])
 
-mask = np.zeros((10,10))
-mask[3:-3, 3:-3] = 1 # white square in black background
-im = mask + np.random.randn(10,10) * 0.01 # random image
-masked = np.ma.masked_where(mask == 0, mask)
-
-plt.figure()
-plt.subplot(1,2,1)
-plt.imshow(im, 'gray', interpolation='none')
-plt.subplot(1,2,2)
-plt.imshow(im, 'gray', interpolation='none')
-plt.imshow(masked, 'jet', interpolation='none', alpha=0.7)
-if PLOT_SHOW: plt.show()
-
-case = case=test_ids[3][-3:]
+case = test_ids[3][-3:]
 path = f"../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
 gt = nib.load(os.path.join(path, f'BraTS20_Training_{case}_seg.nii')).get_fdata()
 p = predictByPath(path,case)
-
 
 core = p[:,:,:,1]
 edema= p[:,:,:,2]
@@ -523,10 +503,10 @@ axarr[1].imshow(p[i,:,:,eval_class], cmap="gray")
 axarr[1].title.set_text(f'predicted class: {SEGMENT_CLASSES[eval_class]}')
 if PLOT_SHOW: plt.show()
 
-
-print("Compiling model for test data")
-model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
-# Evaluate the model on the test data using `evaluate`
-print("Evaluate on test data")
-results = model.evaluate(test_generator, batch_size=100, callbacks= callbacks)
-print("test loss, test acc:", results)
+if TEST: 
+    print("Compiling model for test data")
+    model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
+    # Evaluate the model on the test data using `evaluate`
+    print("Evaluate on test data")
+    results = model.evaluate(test_generator, batch_size=100, callbacks= callbacks)
+    print("test loss, test acc:", results)
