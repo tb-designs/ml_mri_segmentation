@@ -38,25 +38,29 @@ from sklearn.model_selection import train_test_split
 # Callback functionality
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, TensorBoard
 
+# from my files
+import utils
 
 
-
-
+############################
 # TEST/DEBUG PARAMS
 PLOT_SHOW = True
 TRAIN = False
 TEST = True
 SANITY_TEST = False
+############################
 
-
-#IMPORTANT PARAMETERS DEFINES
+############################
+#IMPORTANT PARAMETERS 
 IMG_SIZE=128 
 VOLUME_SLICES = 100 
 VOLUME_START_AT = 22 # first slice of volume that we will include, early slices often have no useful information
 EPOCHS = 35
+############################
 
-# Make numpy printouts easier to read.
-np.set_printoptions(precision=3, suppress=True)
+############################
+# SETUP
+np.set_printoptions(precision=3, suppress=True) # Make numpy printouts easier to read.
 
 # DEFINE segmetation-areas  
 SEGMENT_CLASSES = {
@@ -66,16 +70,15 @@ SEGMENT_CLASSES = {
     3 : 'ENHANCING' # original 4 -> converted into 3 later
 }
 
-
-
-###################################################
-# Sanity check of nii data (for debug only)
-
-# Set path
 TRAIN_DATASET_PATH = '../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/'
 VALIDATION_DATASET_PATH = '../BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData'
+############################
 
 print("Set dataset paths")
+
+
+############################
+# SANITY TESTING
 
 # Sanity test to check the dataset paths and imaging ability
 if SANITY_TEST:
@@ -99,10 +102,6 @@ if SANITY_TEST:
     ax5.imshow(test_mask[:,:,test_mask.shape[0]//2-slice_w])
     ax5.set_title('Mask')
 
-
-
-    ###################################################
-    # Add effects to show segments
     niimg = nl.image.load_img(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii')
     nimask = nl.image.load_img(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_seg.nii')
 
@@ -128,61 +127,7 @@ if SANITY_TEST:
 
     print("Ran sanity check")
 
-    if PLOT_SHOW: plt.show()
-
-# dice loss 
-def dice_coef(y_true, y_pred, smooth=1.0):
-    n_classes = 4
-    for i in range(n_classes):
-        y_t_flat = K.flatten(y_true[:,:,:,i])
-        y_p_flat = K.flatten(y_pred[:,:,:,i])
-        intersection = K.sum(y_t_flat * y_p_flat)
-        loss = ((2. * intersection + smooth) / (K.sum(y_t_flat) + K.sum(y_p_flat) + smooth))
-        K.print_tensor(loss, message='loss value for class {} : '.format(SEGMENT_CLASSES[i]))
-        if i == 0:
-            total_loss = loss
-        else:
-            total_loss = total_loss + loss
-    total_loss = total_loss / n_classes
-    K.print_tensor(total_loss, message=' total dice coef: ')
-    return total_loss
-
-# per class dice coefficient
-def dice_coef_none(y_true, y_pred, epsilon=1e-6):
-    intersection = K.sum(K.abs(y_true[:,:,:,0] * y_pred[:,:,:,0]))
-    return (2. * intersection) / (K.sum(K.square(y_true[:,:,:,0])) + K.sum(K.square(y_pred[:,:,:,0])) + epsilon)
-
-def dice_coef_necrotic(y_true, y_pred, epsilon=1e-6):
-    intersection = K.sum(K.abs(y_true[:,:,:,1] * y_pred[:,:,:,1]))
-    return (2. * intersection) / (K.sum(K.square(y_true[:,:,:,1])) + K.sum(K.square(y_pred[:,:,:,1])) + epsilon)
-
-def dice_coef_edema(y_true, y_pred, epsilon=1e-6):
-    intersection = K.sum(K.abs(y_true[:,:,:,2] * y_pred[:,:,:,2]))
-    return (2. * intersection) / (K.sum(K.square(y_true[:,:,:,2])) + K.sum(K.square(y_pred[:,:,:,2])) + epsilon)
-
-def dice_coef_enhancing(y_true, y_pred, epsilon=1e-6):
-    intersection = K.sum(K.abs(y_true[:,:,:,3] * y_pred[:,:,:,3]))
-    return (2. * intersection) / (K.sum(K.square(y_true[:,:,:,3])) + K.sum(K.square(y_pred[:,:,:,3])) + epsilon)
-
-# Computing Precision 
-def precision(y_true, y_pred):
-        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-        precision = true_positives / (predicted_positives + K.epsilon())
-        return precision
-    
-# Computing Sensitivity      
-def sensitivity(y_true, y_pred):
-    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-    return true_positives / (possible_positives + K.epsilon())
-
-# Computing Specificity
-def specificity(y_true, y_pred):
-    true_negatives = K.sum(K.round(K.clip((1-y_true) * (1-y_pred), 0, 1)))
-    possible_negatives = K.sum(K.round(K.clip(1-y_true, 0, 1)))
-    return true_negatives / (possible_negatives + K.epsilon())
-
+    plt.show()
 
 
 
