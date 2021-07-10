@@ -4,6 +4,14 @@
 
 import keras.backend as K
 
+# Segment Classes Reference
+SEGMENT_CLASSES = {
+    0 : 'NOT tumor',
+    1 : 'NECROTIC/CORE', # or NON-ENHANCING tumor CORE
+    2 : 'EDEMA',
+    3 : 'ENHANCING' # original 4 -> converted into 3 later
+}
+
 ############################
 #
 #   @fname: dice_coef

@@ -39,7 +39,7 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, TensorBoard
 
 # from my files
-import utils
+from utils import *
 
 
 ############################
