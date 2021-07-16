@@ -211,6 +211,81 @@ train_and_test_ids = pathListIntoIds(train_and_val_directories);
 train_test_ids, val_ids = train_test_split(train_and_test_ids,test_size=0.2) 
 train_ids, test_ids = train_test_split(train_test_ids,test_size=0.15) 
 
+
+########################################
+# Override of Keras DataGenerator class
+########################################
+class DataGenerator(Sequence):
+    'Generates data for Keras'
+    def __init__(self, list_IDs, dim=(IMG_SIZE,IMG_SIZE), batch_size = 1, n_channels = 2, shuffle=True):
+        'Initialization'
+        self.dim = dim
+        self.batch_size = batch_size
+        self.list_IDs = list_IDs
+        self.n_channels = n_channels
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.list_IDs) / self.batch_size))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        Batch_ids = [self.list_IDs[k] for k in indexes]
+
+        # Generate data
+        X, y = self.__data_generation(Batch_ids)
+
+        return X, y
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(len(self.list_IDs))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, Batch_ids):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.zeros((self.batch_size*VOLUME_SLICES, *self.dim, self.n_channels))
+        y = np.zeros((self.batch_size*VOLUME_SLICES, 240, 240))
+        Y = np.zeros((self.batch_size*VOLUME_SLICES, *self.dim, 4))
+
+        
+        # Generate data
+        for c, i in enumerate(Batch_ids):
+            case_path = os.path.join(TRAIN_DATASET_PATH, i)
+
+            data_path = os.path.join(case_path, f'{i}_flair.nii');
+            flair = nib.load(data_path).get_fdata()    
+
+            data_path = os.path.join(case_path, f'{i}_t1ce.nii');
+            ce = nib.load(data_path).get_fdata()
+            
+            data_path = os.path.join(case_path, f'{i}_seg.nii');
+            seg = nib.load(data_path).get_fdata()
+        
+            for j in range(VOLUME_SLICES):
+                 X[j +VOLUME_SLICES*c,:,:,0] = cv2.resize(flair[:,:,j+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE));
+                 X[j +VOLUME_SLICES*c,:,:,1] = cv2.resize(ce[:,:,j+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE));
+
+                 y[j +VOLUME_SLICES*c] = seg[:,:,j+VOLUME_START_AT];
+                    
+        # Generate masks
+        y[y==4] = 3;
+        mask = tf.one_hot(y, 4);
+        Y = tf.image.resize(mask, (IMG_SIZE, IMG_SIZE));
+        return X/np.max(X), Y
+       
+########################################
+# END Override of Keras DataGenerator
+########################################
+
 # Create the DataGenerator objects for the training, testing, and validation datasets 
 training_generator = DataGenerator(train_ids)
 valid_generator = DataGenerator(val_ids)
@@ -353,7 +428,7 @@ def predictByPath(case_path,case):
 #                           slices are usually empty
 #   @desc:  Function to plot the model predictions.
 #           Used to generate visualizations of model
-#           performance using the training set data
+#           performance using the training set
 #
 def showPredictsById(case, start_slice = 60):
     # Obtain image from the dataset and run the model
