@@ -72,10 +72,6 @@ SEGMENT_CLASSES = {
 
 TRAIN_DATASET_PATH = '../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/'
 VALIDATION_DATASET_PATH = '../BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData'
-############################
-
-print("Set dataset paths")
-
 
 ############################
 # SANITY TESTING
@@ -131,9 +127,18 @@ if SANITY_TEST:
 
 
 
-# source: https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/
-
-
+############################
+#
+#   @fname: build_unet
+#   @param: inputs   --> the input layer for the model
+#           ker_init --> layer weights initialization method 
+#           dropout  --> percentage of nodes dropped in the
+#                        dropout layer
+#   @desc:  Builds the u-net CNN model based on the following source:
+#           https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/
+#           Note: number of filters at each layer adjusted for 128x128
+#           image size
+#
 def build_unet(inputs, ker_init, dropout):
     conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = ker_init)(inputs)
     conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = ker_init)(conv1)
@@ -180,120 +185,64 @@ def build_unet(inputs, ker_init, dropout):
     
     return Model(inputs = inputs, outputs = conv10)
 
+
+# Define the input layer 
 input_layer = Input((IMG_SIZE, IMG_SIZE, 2))
 
+# Build u-net model
 print("Building u-net")
 model = build_unet(input_layer, 'he_normal', 0.2)
+
+#compile u-net model
 print("Compiling u-net")
 model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema ,dice_coef_enhancing] )
 
-# lists of directories with studies
+# Obtain directories containing the datasets (as each sample is stored in a seperate folder)
 train_and_val_directories = [f.path for f in os.scandir(TRAIN_DATASET_PATH) if f.is_dir()]
 
 # file BraTS20_Training_355 has ill formatted name for for seg.nii file
+# so we remove it if it exists (hasn't already been removed)
 train_and_val_directories.remove(TRAIN_DATASET_PATH+'BraTS20_Training_355')
 
-
-def pathListIntoIds(dirList):
-    x = []
-    for i in range(0,len(dirList)):
-        x.append(dirList[i][dirList[i].rfind('/')+1:])
-    return x
-
+# convert directories list into id's
 train_and_test_ids = pathListIntoIds(train_and_val_directories); 
-
     
+# split training and testing datasets
 train_test_ids, val_ids = train_test_split(train_and_test_ids,test_size=0.2) 
 train_ids, test_ids = train_test_split(train_test_ids,test_size=0.15) 
 
-class DataGenerator(Sequence):
-    'Generates data for Keras'
-    def __init__(self, list_IDs, dim=(IMG_SIZE,IMG_SIZE), batch_size = 1, n_channels = 2, shuffle=True):
-        'Initialization'
-        self.dim = dim
-        self.batch_size = batch_size
-        self.list_IDs = list_IDs
-        self.n_channels = n_channels
-        self.shuffle = shuffle
-        self.on_epoch_end()
-
-    def __len__(self):
-        'Denotes the number of batches per epoch'
-        return int(np.floor(len(self.list_IDs) / self.batch_size))
-
-    def __getitem__(self, index):
-        'Generate one batch of data'
-        # Generate indexes of the batch
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-
-        # Find list of IDs
-        Batch_ids = [self.list_IDs[k] for k in indexes]
-
-        # Generate data
-        X, y = self.__data_generation(Batch_ids)
-
-        return X, y
-
-    def on_epoch_end(self):
-        'Updates indexes after each epoch'
-        self.indexes = np.arange(len(self.list_IDs))
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
-
-    def __data_generation(self, Batch_ids):
-        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
-        # Initialization
-        X = np.zeros((self.batch_size*VOLUME_SLICES, *self.dim, self.n_channels))
-        y = np.zeros((self.batch_size*VOLUME_SLICES, 240, 240))
-        Y = np.zeros((self.batch_size*VOLUME_SLICES, *self.dim, 4))
-
-        
-        # Generate data
-        for c, i in enumerate(Batch_ids):
-            case_path = os.path.join(TRAIN_DATASET_PATH, i)
-
-            data_path = os.path.join(case_path, f'{i}_flair.nii');
-            flair = nib.load(data_path).get_fdata()    
-
-            data_path = os.path.join(case_path, f'{i}_t1ce.nii');
-            ce = nib.load(data_path).get_fdata()
-            
-            data_path = os.path.join(case_path, f'{i}_seg.nii');
-            seg = nib.load(data_path).get_fdata()
-        
-            for j in range(VOLUME_SLICES):
-                 X[j +VOLUME_SLICES*c,:,:,0] = cv2.resize(flair[:,:,j+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE));
-                 X[j +VOLUME_SLICES*c,:,:,1] = cv2.resize(ce[:,:,j+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE));
-
-                 y[j +VOLUME_SLICES*c] = seg[:,:,j+VOLUME_START_AT];
-                    
-        # Generate masks
-        y[y==4] = 3;
-        mask = tf.one_hot(y, 4);
-        Y = tf.image.resize(mask, (IMG_SIZE, IMG_SIZE));
-        return X/np.max(X), Y
-        
+# Create the DataGenerator objects for the training, testing, and validation datasets 
 training_generator = DataGenerator(train_ids)
 valid_generator = DataGenerator(val_ids)
 test_generator = DataGenerator(test_ids)
 
+# define csv_logger for callback use
 csv_logger = CSVLogger('training.log', separator=',', append=False)
 
-
+# define callbacks
 callbacks = [
+    # Early stopping used for debug, disabled for full training
     #keras.callbacks.EarlyStopping(monitor='loss', min_delta=0,
                                   #patience=2, verbose=1, mode='auto'),
+
+    # Reduce the learning rate if reached a plateau in the loss function
     keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                                   patience=2, min_lr=0.000001, verbose=1),
+    
+    # Save model checkpoints incase training is interrupted
     keras.callbacks.ModelCheckpoint(filepath = 'model_.{epoch:02d}-{val_loss:.6f}.m5',
                                     verbose=1, save_best_only=True, save_weights_only = True),
+
+    # log training data as CSV
     csv_logger
 ]
 print("Built Data Generator")
 print("Clearing Keras Session")
 
+# Clear previous Keras session
 K.clear_session()
 
+# Training Process
 if TRAIN:
 
     print("Beginning model training")
@@ -324,41 +273,53 @@ history = pd.read_csv('training.log', sep=',', engine='python')
 
 hist=history
 
-############### ########## ####### #######
+#######################################
+# Results Visualizaiton Section
 
 print("Retreiving perfomance metrics")
 
+# retrieve performance metrics
 acc=hist['accuracy']
 val_acc=hist['val_accuracy']
-
 epoch=range(len(acc))
-
 loss=hist['loss']
 val_loss=hist['val_loss']
-
 train_dice=hist['dice_coef']
 val_dice=hist['val_dice_coef']
 
+# Set up plots
 f,ax=plt.subplots(1,4,figsize=(16,8))
 
+# Plot accuracy over epochs
 ax[0].plot(epoch,acc,'b',label='Training Accuracy')
 ax[0].plot(epoch,val_acc,'r',label='Validation Accuracy')
 ax[0].legend()
 
+# Plot loss over epochs
 ax[1].plot(epoch,loss,'b',label='Training Loss')
 ax[1].plot(epoch,val_loss,'r',label='Validation Loss')
 ax[1].legend()
 
+# Plot overall dice loss over epochs
 ax[2].plot(epoch,train_dice,'b',label='Training dice coef')
 ax[2].plot(epoch,val_dice,'r',label='Validation dice coef')
 ax[2].legend()
 
+# Plot mean IoU over epochs
 ax[3].plot(epoch,hist['mean_io_u'],'b',label='Training mean IOU')
 ax[3].plot(epoch,hist['val_mean_io_u'],'r',label='Validation mean IOU')
 ax[3].legend()
 
 if PLOT_SHOW: plt.show()
 
+
+############################
+#
+#   @fname: predictByPath
+#   @param: case_path --> Path to data sample directory 
+#           case -------> numeric ID of data sample
+#   @desc:  Function for running the u-net model on a specific image case
+#
 def predictByPath(case_path,case):
     files = next(os.walk(case_path))[2]
     X = np.empty((VOLUME_SLICES, IMG_SIZE, IMG_SIZE, 2))
@@ -383,71 +344,69 @@ def predictByPath(case_path,case):
     #model.evaluate(x=X,y=y[:,:,:], callbacks= callbacks)
     return model.predict(X/np.max(X), verbose=1)
 
-
+############################
+#
+#   @fname: showPredictsById
+#   @param: case  --------> numeric ID of data sample 
+#           start_slice --> slice of the image to begin at
+#                           used because first 50 or so
+#                           slices are usually empty
+#   @desc:  Function to plot the model predictions.
+#           Used to generate visualizations of model
+#           performance using the training set data
+#
 def showPredictsById(case, start_slice = 60):
+    # Obtain image from the dataset and run the model
     path = f"../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
     gt = nib.load(os.path.join(path, f'BraTS20_Training_{case}_seg.nii')).get_fdata()
     origImage = nib.load(os.path.join(path, f'BraTS20_Training_{case}_flair.nii')).get_fdata()
     p = predictByPath(path,case)
 
+    # define classes
     core = p[:,:,:,1]
     edema= p[:,:,:,2]
     enhancing = p[:,:,:,3]
 
+    # set up plots
     plt.figure(figsize=(18, 50))
     f, axarr = plt.subplots(1,6, figsize = (18, 50)) 
 
-    for i in range(3): # for each image, add brain background
+    # for each image, add brain background
+    for i in range(3):
         axarr[i].imshow(cv2.resize(origImage[:,:,start_slice+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE)), cmap="gray", interpolation='none')
     
+    # plot original flair image
     axarr[0].imshow(cv2.resize(origImage[:,:,start_slice+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE)), cmap="gray")
     axarr[0].title.set_text('Original image flair')
+    # plot ground truth
     curr_gt=cv2.resize(gt[:,:,start_slice+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE), interpolation = cv2.INTER_NEAREST)
     axarr[1].imshow(curr_gt, cmap="Reds", interpolation='none', alpha=0.3)
     axarr[1].title.set_text('Ground truth')
+    #plot scan with all classes present
     axarr[2].imshow(p[start_slice,:,:,1:4], cmap="Reds", interpolation='none', alpha=0.3)
     axarr[2].title.set_text('all classes')
+    #plot edema prediction
     axarr[3].imshow(edema[start_slice,:,:], cmap="RdPu", interpolation='none', alpha=0.3)
     axarr[3].title.set_text(f'{SEGMENT_CLASSES[1]} predicted')
+    # plot necrotic core prediciton
     axarr[4].imshow(core[start_slice,:,], cmap="RdPu", interpolation='none', alpha=0.3)
     axarr[4].title.set_text(f'{SEGMENT_CLASSES[2]} predicted')
+    # plot enhancing prediction
     axarr[5].imshow(enhancing[start_slice,:,], cmap="RdPu", interpolation='none', alpha=0.3)
     axarr[5].title.set_text(f'{SEGMENT_CLASSES[3]} predicted')
     if PLOT_SHOW: plt.show()
-    
+
+# Run the model on a number of test samples to obtain visualizations    
 print("Displaying predictions")
 showPredictsById(case=test_ids[0][-3:])
-#showPredictsById(case=test_ids[1][-3:])
-#showPredictsById(case=test_ids[2][-3:])
-#showPredictsById(case=test_ids[3][-3:])
-#showPredictsById(case=test_ids[4][-3:])
-#showPredictsById(case=test_ids[5][-3:])
-#showPredictsById(case=test_ids[6][-3:])
+showPredictsById(case=test_ids[1][-3:])
+showPredictsById(case=test_ids[2][-3:])
+showPredictsById(case=test_ids[3][-3:])
+showPredictsById(case=test_ids[4][-3:])
+showPredictsById(case=test_ids[5][-3:])
+showPredictsById(case=test_ids[6][-3:])
 
-case = test_ids[3][-3:]
-path = f"../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/BraTS20_Training_{case}"
-gt = nib.load(os.path.join(path, f'BraTS20_Training_{case}_seg.nii')).get_fdata()
-p = predictByPath(path,case)
-
-core = p[:,:,:,1]
-edema= p[:,:,:,2]
-enhancing = p[:,:,:,3]
-
-i=40 # slice at
-eval_class = 2 #     0 : 'NOT tumor',  1 : 'ENHANCING',    2 : 'CORE',    3 : 'WHOLE'
-
-gt[gt != eval_class] = 1 # use only one class for per class evaluation 
-
-resized_gt = cv2.resize(gt[:,:,i+VOLUME_START_AT], (IMG_SIZE, IMG_SIZE))
-
-plt.figure()
-f, axarr = plt.subplots(1,2) 
-axarr[0].imshow(resized_gt, cmap="gray")
-axarr[0].title.set_text('ground truth')
-axarr[1].imshow(p[i,:,:,eval_class], cmap="gray")
-axarr[1].title.set_text(f'predicted class: {SEGMENT_CLASSES[eval_class]}')
-if PLOT_SHOW: plt.show()
-
+# Evaluate model on the test data
 if TEST: 
     print("Compiling model for test data")
     model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
