@@ -1,19 +1,26 @@
-# TODO Liscense stuff here!
+###################################
+#
+#   @filename: u-net.py
+#   @auth: Ryan Blais, V00863568
+#   @desc: This python script generates,
+#          trains, and tests the u-net 
+#          fully convolutional neural network
+#          for use in the University of Victoria
+#          ECE 470, A01, course project
+#
 
-
-
-# for file access to use data generator
-import os
+########################################
+#           ENVIRONMENT SETUP          #
+########################################
+import os # for file access to use data generator
 
 # math operations and image resizing
 import numpy as np
 import cv2
 
-# pandas used for reading .csv
-import pandas as pd
+import pandas as pd # used for reading .csv
 
-# for plotting results
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # for plotting results
 
 # neural imaging library: NiBabel
 # for NlfTI file handling
@@ -32,37 +39,28 @@ from tensorflow.keras.models import *
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 
-# convenient split function imported from sk-learn
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split # convenient split function imported from sk-learn
 
-# Callback functionality
-from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, TensorBoard
+from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, TensorBoard # Callback functionality
 
-# from my files
-from utils import *
+from utils import * # utility functions from utils.py
 
+################################################
+#           TEST AND DEBUG PARAMETERS          #
+################################################
 
-############################
-# TEST/DEBUG PARAMS
+# Enable/Disable various sections of the script
 PLOT_SHOW = True
 TRAIN = False
 TEST = True
 SANITY_TEST = False
-############################
 
-############################
-#IMPORTANT PARAMETERS 
+# Global parameters
 IMG_SIZE=128 
 VOLUME_SLICES = 100 
 VOLUME_START_AT = 22 # first slice of volume that we will include, early slices often have no useful information
 EPOCHS = 35
-############################
 
-############################
-# SETUP
-np.set_printoptions(precision=3, suppress=True) # Make numpy printouts easier to read.
-
-# DEFINE segmetation-areas  
 SEGMENT_CLASSES = {
     0 : 'NOT tumor',
     1 : 'NECROTIC/CORE', # or NON-ENHANCING tumor CORE
@@ -73,18 +71,23 @@ SEGMENT_CLASSES = {
 TRAIN_DATASET_PATH = '../BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/'
 VALIDATION_DATASET_PATH = '../BraTS2020_ValidationData/MICCAI_BraTS2020_ValidationData'
 
-############################
-# SANITY TESTING
+np.set_printoptions(precision=3, suppress=True) # Make numpy printouts easier to read.
+
+
+#################################################
+#           DATA ACCESS SANITY TESTING          #
+#################################################
 
 # Sanity test to check the dataset paths and imaging ability
 if SANITY_TEST:
+    # load in the first training sample
     test_image_flair=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_flair.nii').get_fdata()
     test_image_t1=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t1.nii').get_fdata()
     test_image_t1ce=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t1ce.nii').get_fdata()
     test_image_t2=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_t2.nii').get_fdata()
     test_mask=nib.load(TRAIN_DATASET_PATH + 'BraTS20_Training_001/BraTS20_Training_001_seg.nii').get_fdata()
 
-
+    # Plot slices of the loaded scans
     fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(1,5, figsize = (20, 10))
     slice_w = 25
     ax1.imshow(test_image_flair[:,:,test_image_flair.shape[0]//2-slice_w], cmap = 'gray')
@@ -103,7 +106,7 @@ if SANITY_TEST:
 
     fig, axes = plt.subplots(nrows=4, figsize=(30, 40))
 
-
+    # Plot the entire scan using nlplt to ensure that the scan is not corrupted
     nlplt.plot_anat(niimg,
                     title='BraTS20_Training_001_flair.nii plot_anat',
                     axes=axes[0])
@@ -125,7 +128,9 @@ if SANITY_TEST:
 
     plt.show()
 
-
+############################################
+#           UNET MODEL DEFINIITON          #
+############################################
 
 ############################
 #
@@ -197,6 +202,10 @@ model = build_unet(input_layer, 'he_normal', 0.2)
 print("Compiling u-net")
 model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema ,dice_coef_enhancing] )
 
+############################################
+#           SETUP DATA GENERATION          #
+############################################
+
 # Obtain directories containing the datasets (as each sample is stored in a seperate folder)
 train_and_val_directories = [f.path for f in os.scandir(TRAIN_DATASET_PATH) if f.is_dir()]
 
@@ -211,10 +220,8 @@ train_and_test_ids = pathListIntoIds(train_and_val_directories);
 train_test_ids, val_ids = train_test_split(train_and_test_ids,test_size=0.2) 
 train_ids, test_ids = train_test_split(train_test_ids,test_size=0.15) 
 
-
 ########################################
 # Override of Keras DataGenerator class
-########################################
 class DataGenerator(Sequence):
     'Generates data for Keras'
     def __init__(self, list_IDs, dim=(IMG_SIZE,IMG_SIZE), batch_size = 1, n_channels = 2, shuffle=True):
@@ -281,8 +288,7 @@ class DataGenerator(Sequence):
         mask = tf.one_hot(y, 4);
         Y = tf.image.resize(mask, (IMG_SIZE, IMG_SIZE));
         return X/np.max(X), Y
-       
-########################################
+
 # END Override of Keras DataGenerator
 ########################################
 
@@ -312,9 +318,13 @@ callbacks = [
     csv_logger
 ]
 print("Built Data Generator")
-print("Clearing Keras Session")
+
+######################################
+#           TRAIN THE MODEL          #
+######################################
 
 # Clear previous Keras session
+print("Clearing Keras Session")
 K.clear_session()
 
 # Training Process
@@ -348,8 +358,9 @@ history = pd.read_csv('training.log', sep=',', engine='python')
 
 hist=history
 
-#######################################
-# Results Visualizaiton Section
+#################################################
+#           VISUALIZE TRAINING RESULTS          #
+#################################################
 
 print("Retreiving perfomance metrics")
 
@@ -481,7 +492,9 @@ showPredictsById(case=test_ids[4][-3:])
 showPredictsById(case=test_ids[5][-3:])
 showPredictsById(case=test_ids[6][-3:])
 
-# Evaluate model on the test data
+########################################################
+#           EVALUATE MODEL ON THE TESTING SET          #
+########################################################
 if TEST: 
     print("Compiling model for test data")
     model.compile(loss="categorical_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=0.001), metrics = ['accuracy',tf.keras.metrics.MeanIoU(num_classes=4), dice_coef, precision, sensitivity, specificity, dice_coef_necrotic, dice_coef_edema, dice_coef_enhancing] )
