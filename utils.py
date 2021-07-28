@@ -3,7 +3,7 @@
 #   @filename: utils.py
 #   @auth: Ryan Blais, V00863568
 #   @desc: This python script contains utility
-#          functions used in the u-net.py script
+#          functions used in the main.py script
 #          used in the University of Victoria
 #          ECE 470, A01, course project
 #
