@@ -80,5 +80,8 @@ The script defaults are the settings shown above.
 ## Other
 When training the model, checkpoints are used to save model progress so don't be surprised by additional files popping up in the directory when training.
 
+For any questions on getting the script to run (in reference to ECE470 project marking) feel free to contact me at:
+ryanblais@uvic.ca 
+
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
