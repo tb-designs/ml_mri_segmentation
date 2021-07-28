@@ -43,6 +43,7 @@ $ tree -L 2
 │   └── MICCAI_BraTS2020_ValidationData
 └── code
     ├── README.md
+    ├── training.log
     ├── main.py
     ├── model_x1_1.h5
     └── utils.py
